@@ -11,9 +11,9 @@ import {
   SpaceBetween,
   Table,
   LineChart,
-  ColumnLayout
+  ColumnLayout,
+  Cards
 } from '@cloudscape-design/components';
-import Layout from '../components/Layout';
 
 interface MarketMetrics {
   medianPrice: string;
@@ -42,12 +42,27 @@ const MarketAnalysis: React.FC = () => {
   };
 
   const marketTrends = [
-    { month: new Date('2023-01'), value: 425000 },
-    { month: new Date('2023-02'), value: 430000 },
-    { month: new Date('2023-03'), value: 435000 },
-    { month: new Date('2023-04'), value: 440000 },
-    { month: new Date('2023-05'), value: 445000 },
-    { month: new Date('2023-06'), value: 450000 }
+    {
+      neighborhood: 'Downtown',
+      medianPrice: '$525,000',
+      priceChange: '+6.2%',
+      inventory: '145',
+      daysOnMarket: '25'
+    },
+    {
+      neighborhood: 'Suburbs North',
+      medianPrice: '$425,000',
+      priceChange: '+4.8%',
+      inventory: '230',
+      daysOnMarket: '32'
+    },
+    {
+      neighborhood: 'Suburbs South',
+      medianPrice: '$395,000',
+      priceChange: '+5.1%',
+      inventory: '185',
+      daysOnMarket: '28'
+    }
   ];
 
   const comparableProperties = [
@@ -75,174 +90,103 @@ const MarketAnalysis: React.FC = () => {
   ];
 
   return (
-    <Layout activeHref="/market-analysis" isLoading={isLoading}>
-      <Container>
-        <SpaceBetween size="l">
-          <Form
-            header={
-              <Header
-                variant="h2"
-                description="Enter location details for market analysis"
-              >
-                Market Location
-              </Header>
+    <Container>
+      <SpaceBetween size="l">
+        <Header
+          variant="h1"
+          description="Detailed analysis of market trends by neighborhood"
+        >
+          Market Analysis
+        </Header>
+
+        <Table
+          columnDefinitions={[
+            {
+              id: 'neighborhood',
+              header: 'Neighborhood',
+              cell: item => item.neighborhood
+            },
+            {
+              id: 'medianPrice',
+              header: 'Median Price',
+              cell: item => item.medianPrice
+            },
+            {
+              id: 'priceChange',
+              header: 'YoY Change',
+              cell: item => (
+                <Box color={item.priceChange.startsWith('+') ? 'text-status-success' : 'text-status-error'}>
+                  {item.priceChange}
+                </Box>
+              )
+            },
+            {
+              id: 'inventory',
+              header: 'Active Listings',
+              cell: item => item.inventory
+            },
+            {
+              id: 'daysOnMarket',
+              header: 'Days on Market',
+              cell: item => item.daysOnMarket
             }
-            actions={
-              <Button
-                variant="primary"
-                onClick={handleAnalyze}
-                loading={isLoading}
-              >
-                Analyze Market
-              </Button>
-            }
-          >
-            <Grid
-              gridDefinition={[
-                { colspan: { default: 4, xxs: 12 } },
-                { colspan: { default: 4, xxs: 12 } },
-                { colspan: { default: 4, xxs: 12 } }
-              ]}
+          ]}
+          items={marketTrends}
+          header={
+            <Header
+              variant="h2"
+              description="Current market metrics by neighborhood"
             >
-              <FormField label="City">
-                <Input
-                  value={location.city}
-                  onChange={e => setLocation(prev => ({ ...prev, city: e.detail.value }))}
-                />
-              </FormField>
+              Neighborhood Trends
+            </Header>
+          }
+        />
 
-              <FormField label="State">
-                <Input
-                  value={location.state}
-                  onChange={e => setLocation(prev => ({ ...prev, state: e.detail.value }))}
-                />
-              </FormField>
-
-              <FormField label="ZIP Code">
-                <Input
-                  value={location.zipCode}
-                  onChange={e => setLocation(prev => ({ ...prev, zipCode: e.detail.value }))}
-                />
-              </FormField>
-            </Grid>
-          </Form>
-
-          {showResults && (
-            <>
-              <Container
-                header={
-                  <Header
-                    variant="h2"
-                    description="Current market metrics"
-                  >
-                    Market Overview
-                  </Header>
-                }
-              >
-                <ColumnLayout columns={4}>
-                  <Box variant="awsui-key-label">
-                    <div>Median Price</div>
-                    <div>$450,000</div>
-                    <div>↑ 5.2% YoY</div>
-                  </Box>
-                  <Box variant="awsui-key-label">
-                    <div>Inventory</div>
-                    <div>245</div>
-                    <div>↓ 12% YoY</div>
-                  </Box>
-                  <Box variant="awsui-key-label">
-                    <div>Days on Market</div>
-                    <div>22</div>
-                    <div>↓ 8 days YoY</div>
-                  </Box>
-                  <Box variant="awsui-key-label">
-                    <div>Price per Sq Ft</div>
-                    <div>$225</div>
-                    <div>↑ 4.8% YoY</div>
-                  </Box>
-                </ColumnLayout>
-              </Container>
-
-              <Container
-                header={
-                  <Header
-                    variant="h2"
-                    description="6-month price trend"
-                  >
-                    Market Trends
-                  </Header>
-                }
-              >
-                <LineChart
-                  series={[
-                    {
-                      title: "Median Price",
-                      type: "line",
-                      data: marketTrends.map(trend => ({
-                        x: trend.month,
-                        y: trend.value
-                      }))
-                    }
-                  ]}
-                  xDomain={[marketTrends[0].month, marketTrends[marketTrends.length - 1].month]}
-                  yDomain={[400000, 475000]}
-                  i18nStrings={{
-                    xTickFormatter: (x: Date) => x.toLocaleDateString('en-US', { month: 'short' }),
-                    yTickFormatter: (y: number) => `$${(y / 1000).toFixed(0)}k`
-                  }}
-                  height={300}
-                />
-              </Container>
-
-              <Container
-                header={
-                  <Header
-                    variant="h2"
-                    description="Recent comparable properties in the area"
-                  >
-                    Comparable Properties
-                  </Header>
-                }
-              >
-                <Table
-                  columnDefinitions={[
-                    {
-                      id: "address",
-                      header: "Address",
-                      cell: item => item.address
-                    },
-                    {
-                      id: "price",
-                      header: "Price",
-                      cell: item => item.price
-                    },
-                    {
-                      id: "sqft",
-                      header: "Square Feet",
-                      cell: item => item.sqft
-                    },
-                    {
-                      id: "bedsBaths",
-                      header: "Beds/Baths",
-                      cell: item => item.bedsBaths
-                    },
-                    {
-                      id: "daysOnMarket",
-                      header: "Days on Market",
-                      cell: item => item.daysOnMarket
-                    }
-                  ]}
-                  items={comparableProperties}
-                  loading={isLoading}
-                  loadingText="Loading comparable properties"
-                  variant="embedded"
-                />
-              </Container>
-            </>
-          )}
-        </SpaceBetween>
-      </Container>
-    </Layout>
+        <Cards
+          cardDefinition={{
+            header: item => (
+              <Header variant="h3">{item.neighborhood}</Header>
+            ),
+            sections: [
+              {
+                id: 'metrics',
+                content: item => (
+                  <ColumnLayout columns={2} variant="text-grid">
+                    <div>
+                      <Box variant="awsui-key-label">Median Price</Box>
+                      <Box variant="p">{item.medianPrice}</Box>
+                    </div>
+                    <div>
+                      <Box variant="awsui-key-label">Price Change</Box>
+                      <Box variant="p" color={item.priceChange.startsWith('+') ? 'text-status-success' : 'text-status-error'}>
+                        {item.priceChange}
+                      </Box>
+                    </div>
+                    <div>
+                      <Box variant="awsui-key-label">Active Listings</Box>
+                      <Box variant="p">{item.inventory}</Box>
+                    </div>
+                    <div>
+                      <Box variant="awsui-key-label">Days on Market</Box>
+                      <Box variant="p">{item.daysOnMarket}</Box>
+                    </div>
+                  </ColumnLayout>
+                )
+              }
+            ]
+          }}
+          items={marketTrends}
+          header={
+            <Header
+              variant="h2"
+              description="Detailed view of each neighborhood"
+            >
+              Neighborhood Cards
+            </Header>
+          }
+        />
+      </SpaceBetween>
+    </Container>
   );
 };
 

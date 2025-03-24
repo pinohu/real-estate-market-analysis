@@ -1,148 +1,68 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
-  Box,
+  Cards,
   Container,
-  Grid,
   Header,
-  LineChart,
-  Link,
-  Spinner,
-  Table
+  Box,
+  ColumnLayout,
 } from '@cloudscape-design/components';
-import Layout from '../components/Layout';
-
-interface MarketMetric {
-  name: string;
-  value: string;
-  change: string;
-  trend: 'positive' | 'negative' | 'neutral';
-}
 
 const Dashboard: React.FC = () => {
-  const [isLoading, setIsLoading] = useState(true);
-  const [marketMetrics, setMarketMetrics] = useState<MarketMetric[]>([]);
-  const [priceData, setPriceData] = useState<any[]>([]);
-
-  useEffect(() => {
-    // Simulated data loading
-    setTimeout(() => {
-      setMarketMetrics([
-        {
-          name: 'Median Home Price',
-          value: '$425,000',
-          change: '+5.2%',
-          trend: 'positive'
-        },
-        {
-          name: 'Average Days on Market',
-          value: '45',
-          change: '-3',
-          trend: 'positive'
-        },
-        {
-          name: 'Inventory',
-          value: '12,450',
-          change: '-2.1%',
-          trend: 'negative'
-        },
-        {
-          name: 'Interest Rate',
-          value: '6.8%',
-          change: '+0.2%',
-          trend: 'negative'
-        }
-      ]);
-
-      setPriceData([
-        { x: new Date('2023-01'), y: 400000 },
-        { x: new Date('2023-02'), y: 405000 },
-        { x: new Date('2023-03'), y: 410000 },
-        { x: new Date('2023-04'), y: 415000 },
-        { x: new Date('2023-05'), y: 420000 },
-        { x: new Date('2023-06'), y: 425000 }
-      ]);
-
-      setIsLoading(false);
-    }, 1500);
-  }, []);
+  const marketMetrics = [
+    {
+      title: 'Average Price',
+      value: '$450,000',
+      trend: '+5.2%',
+      period: 'vs last month'
+    },
+    {
+      title: 'Days on Market',
+      value: '28',
+      trend: '-3.1%',
+      period: 'vs last month'
+    },
+    {
+      title: 'Active Listings',
+      value: '1,245',
+      trend: '+12.4%',
+      period: 'vs last month'
+    },
+    {
+      title: 'Price per Sq Ft',
+      value: '$225',
+      trend: '+4.8%',
+      period: 'vs last month'
+    }
+  ];
 
   return (
-    <Layout activeHref="/" isLoading={isLoading}>
-      <Container>
-        <Grid
-          gridDefinition={[
-            { colspan: { default: 12, xxs: 12 } },
-            { colspan: { default: 12, xxs: 12 } }
-          ]}
-        >
-          <Box margin={{ bottom: 'l' }}>
-            <Table
-              columnDefinitions={[
-                {
-                  id: 'name',
-                  header: 'Metric',
-                  cell: item => item.name
-                },
-                {
-                  id: 'value',
-                  header: 'Value',
-                  cell: item => item.value
-                },
-                {
-                  id: 'change',
-                  header: 'Change',
-                  cell: item => (
-                    <Box color={item.trend === 'positive' ? 'text-status-success' : 'text-status-error'}>
-                      {item.change}
-                    </Box>
-                  )
-                }
-              ]}
-              items={marketMetrics}
-              loading={isLoading}
-              loadingText="Loading market metrics"
-              header={
-                <Header
-                  variant="h2"
-                  description="Key market indicators and their recent changes"
-                >
-                  Market Metrics
-                </Header>
-              }
-            />
+    <Container>
+      <Header
+        variant="h1"
+        description="Overview of the current real estate market"
+      >
+        Market Dashboard
+      </Header>
+      
+      <ColumnLayout columns={2} variant="text-grid">
+        {marketMetrics.map((metric, index) => (
+          <Box
+            key={index}
+            padding="l"
+            textAlign="center"
+            variant="awsui-key-label"
+          >
+            <Box variant="h2">{metric.title}</Box>
+            <Box variant="h1" padding="s">
+              {metric.value}
+            </Box>
+            <Box color={metric.trend.startsWith('+') ? 'text-status-success' : 'text-status-error'}>
+              {metric.trend} {metric.period}
+            </Box>
           </Box>
-
-          <Box>
-            <Header
-              variant="h2"
-              description="6-month price trend in the market"
-            >
-              Price Trends
-            </Header>
-            {isLoading ? (
-              <Spinner />
-            ) : (
-              <LineChart
-                series={[
-                  {
-                    title: 'Median Home Price',
-                    type: 'line',
-                    data: priceData
-                  }
-                ]}
-                xDomain={[priceData[0]?.x, priceData[priceData.length - 1]?.x]}
-                yDomain={[380000, 440000]}
-                i18nStrings={{
-                  xTickFormatter: (x: any) => x.toLocaleDateString('en-US', { month: 'short' }),
-                  yTickFormatter: (y: number) => `$${(y / 1000).toFixed(0)}k`
-                }}
-                height={300}
-              />
-            )}
-          </Box>
-        </Grid>
-      </Container>
-    </Layout>
+        ))}
+      </ColumnLayout>
+    </Container>
   );
 };
 

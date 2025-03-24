@@ -1,64 +1,52 @@
-import React from 'react';
-import {
-  AppLayout,
-  ContentLayout,
-  Header,
-  SideNavigation,
-  Spinner,
-} from '@cloudscape-design/components';
+import React, { PropsWithChildren } from 'react';
+import { AppLayout, TopNavigation, SideNavigation } from '@cloudscape-design/components';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 
-interface LayoutProps {
-  children: React.ReactNode;
-  activeHref?: string;
-  isLoading?: boolean;
-}
+const Layout: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
 
-const Layout: React.FC<LayoutProps> = ({ children, activeHref, isLoading }) => {
   const navigationItems = [
-    {
-      type: 'section',
-      text: 'Main',
-      items: [
-        { type: 'link', text: 'Dashboard', href: '/' },
-        { type: 'link', text: 'Property Analysis', href: '/property-analysis' },
-        { type: 'link', text: 'Market Analysis', href: '/market-analysis' },
-      ]
-    },
-    {
-      type: 'section',
-      text: 'Configuration',
-      items: [
-        { type: 'link', text: 'Settings', href: '/settings' }
-      ]
-    }
-  ] as const;
+    { type: 'link' as const, text: 'Dashboard', href: '/' },
+    { type: 'link' as const, text: 'Market Analysis', href: '/market-analysis' },
+    { type: 'link' as const, text: 'Property Comparison', href: '/property-comparison' },
+  ];
 
   return (
-    <AppLayout
-      navigation={
-        <SideNavigation
-          activeHref={activeHref}
-          items={navigationItems}
-          header={{ text: 'Real Estate Strategist', href: '/' }}
-        />
-      }
-      content={
-        <ContentLayout
-          header={
-            <Header
-              variant="h1"
-              description="Make informed real estate investment decisions"
-            >
-              Real Estate Market Analysis
-              {isLoading && <Spinner />}
-            </Header>
-          }
-        >
-          {children}
-        </ContentLayout>
-      }
-      toolsHide={true}
-    />
+    <div>
+      <TopNavigation
+        identity={{
+          href: '/',
+          title: 'Real Estate Strategist',
+        }}
+        utilities={[
+          {
+            type: 'button',
+            text: 'Settings',
+            onClick: () => navigate('/settings'),
+          },
+        ]}
+      />
+      <AppLayout
+        content={<Outlet />}
+        navigation={
+          <SideNavigation
+            activeHref={location.pathname}
+            items={navigationItems}
+            header={{
+              href: '/',
+              text: 'Navigation'
+            }}
+            onFollow={e => {
+              e.preventDefault();
+              navigate(e.detail.href);
+            }}
+          />
+        }
+        toolsHide={true}
+        navigationWidth={250}
+      />
+    </div>
   );
 };
 
