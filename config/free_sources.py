@@ -27,6 +27,7 @@ class FreeSourcesConfig:
     NOAA_API_KEY = os.getenv('NOAA_API_KEY', 'XvZNvgZLyxqoBeIwKRnfLbXoKRnWyxNE')  # Free tier key
     DATA_GOV_API_KEY = os.getenv('DATA_GOV_API_KEY', '')
     BLS_API_KEY = os.getenv('BLS_API_KEY', '')
+    PROPERTY_API_KEY = os.getenv('PROPERTY_API_KEY', 'demo_key')  # Add property API key with demo_key as default
     
     print("\nInitializing FreeSourcesConfig class variables:")
     print(f"CENSUS_API_KEY: {CENSUS_API_KEY}")

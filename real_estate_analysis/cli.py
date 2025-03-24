@@ -7,11 +7,13 @@ import asyncio
 import logging
 import sys
 from typing import Optional
+import os
 
 import click
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.progress import Progress, SpinnerColumn, TextColumn
+from dotenv import load_dotenv
 
 from api_integrations.census import CensusAPI
 from api_integrations.property import PropertyAPI
@@ -26,6 +28,9 @@ logging.basicConfig(
 )
 
 console = Console()
+
+# Load environment variables
+load_dotenv()
 
 @click.group()
 def cli():
@@ -45,8 +50,8 @@ def analyze_property(address: str, output: Optional[str] = None):
                 console=console,
             ) as progress:
                 # Initialize APIs
-                census_api = CensusAPI()
-                property_api = PropertyAPI()
+                census_api = CensusAPI(api_key=os.getenv('CENSUS_API_KEY'))
+                property_api = PropertyAPI(api_key=os.getenv('PROPERTY_API_KEY'))
 
                 # Get demographic data
                 progress.add_task(description="Fetching demographic data...", total=None)
@@ -99,7 +104,7 @@ def analyze_market(location: str, output: Optional[str] = None):
                 console=console,
             ) as progress:
                 # Initialize API
-                property_api = PropertyAPI()
+                property_api = PropertyAPI(api_key=os.getenv('PROPERTY_API_KEY'))
 
                 # Analyze market
                 progress.add_task(description="Analyzing market conditions...", total=None)
@@ -133,8 +138,8 @@ def check_health():
                 console=console,
             ) as progress:
                 # Initialize APIs
-                census_api = CensusAPI()
-                property_api = PropertyAPI()
+                census_api = CensusAPI(api_key=os.getenv('CENSUS_API_KEY'))
+                property_api = PropertyAPI(api_key=os.getenv('PROPERTY_API_KEY'))
 
                 # Check Census API
                 progress.add_task(description="Checking Census API...", total=None)

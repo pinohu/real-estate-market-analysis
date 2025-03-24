@@ -47,9 +47,15 @@ import json
 import re
 import time
 import asyncio
+from prometheus_client import Counter
+import structlog
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# Define Prometheus counters
+REQUEST_COUNT = Counter('census_api_requests_total', 'Total number of requests made to the Census API', ['api', 'endpoint', 'status'])
+ERROR_COUNT = Counter('census_api_errors_total', 'Total number of errors encountered in the Census API', ['api', 'error_type'])
 
 class CensusAPIError(Exception):
     """Base exception for Census API errors."""
@@ -91,41 +97,42 @@ class CensusAPI(BaseAPI):
         Initialize the Census API client.
         
         Args:
-            api_key (str, optional): The Census API key. If not provided,
-                                   a default key will be used.
+            api_key (str, optional): The Census API key
         """
+        if not api_key:
+            raise ValueError("Census API key is required")
+            
         super().__init__(api_key)
-        self._api_key = api_key or 'fcfce8a06545dfaf59403ebb94566e6d174a6a44'
-        # State FIPS codes from Census API
-        self._state_fips = {
-            'WA': '53', 'OR': '41', 'CA': '06', 'ID': '16', 'NV': '32',
-            'MT': '30', 'WY': '56', 'UT': '49', 'AZ': '04', 'NM': '35',
-            'CO': '08', 'TX': '48', 'OK': '40', 'KS': '20', 'NE': '31',
-            'SD': '46', 'ND': '38', 'MN': '27', 'IA': '19', 'MO': '29',
-            'AR': '05', 'LA': '22', 'MS': '28', 'AL': '01', 'GA': '13',
-            'FL': '12', 'SC': '45', 'NC': '37', 'TN': '47', 'KY': '21',
-            'VA': '51', 'WV': '54', 'MD': '24', 'DE': '10', 'DC': '11',
-            'PA': '42', 'NJ': '34', 'NY': '36', 'CT': '09', 'RI': '44',
-            'MA': '25', 'NH': '33', 'VT': '50', 'ME': '23', 'AK': '02',
-            'HI': '15', 'PR': '72'
-        }
-        self.request_count: int = 0
-        self.error_count: int = 0
-        self.cache: Dict[str, Any] = {}
-        self.cache_timestamps: Dict[str, float] = {}
-        self.last_request_time: float = 0
-        self.circuit_breaker: Dict[str, Union[bool, int, float]] = {
+        self._api_key = api_key
+        self._request_count = REQUEST_COUNT.labels(api=self.__class__.__name__, endpoint="all", status="success")
+        self._error_count = ERROR_COUNT.labels(api=self.__class__.__name__, error_type="general")
+        self._cache = {}
+        self._cache_timestamps = {}
+        self._last_request_time = 0
+        self._circuit_breaker = {
             'failures': 0,
             'last_failure_time': 0,
             'is_open': False,
-            'threshold': 5,
-            'reset_timeout': 300  # 5 minutes
+            'half_open': False
         }
         self.retry_config: Dict[str, Union[int, float]] = {
             'max_retries': 3,
             'base_delay': 1,
             'max_delay': 10,
             'exponential_base': 2
+        }
+        self.logger = structlog.get_logger(self.__class__.__name__)
+        
+        # Initialize state FIPS codes
+        self._state_fips = {
+            'AL': '01', 'AK': '02', 'AZ': '04', 'AR': '05', 'CA': '06', 'CO': '08', 'CT': '09',
+            'DE': '10', 'FL': '12', 'GA': '13', 'HI': '15', 'ID': '16', 'IL': '17', 'IN': '18',
+            'IA': '19', 'KS': '20', 'KY': '21', 'LA': '22', 'ME': '23', 'MD': '24', 'MA': '25',
+            'MI': '26', 'MN': '27', 'MS': '28', 'MO': '29', 'MT': '30', 'NE': '31', 'NV': '32',
+            'NH': '33', 'NJ': '34', 'NM': '35', 'NY': '36', 'NC': '37', 'ND': '38', 'OH': '39',
+            'OK': '40', 'OR': '41', 'PA': '42', 'RI': '44', 'SC': '45', 'SD': '46', 'TN': '47',
+            'TX': '48', 'UT': '49', 'VT': '50', 'VA': '51', 'WA': '53', 'WV': '54', 'WI': '55',
+            'WY': '56', 'DC': '11'
         }
     
     @property
@@ -137,6 +144,11 @@ class CensusAPI(BaseAPI):
     def base_url(self) -> str:
         """Get Census API base URL."""
         return "https://api.census.gov/data"
+    
+    @base_url.setter
+    def base_url(self, value: str):
+        """Set base URL for API."""
+        self._base_url = value
     
     async def _make_request(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
@@ -154,43 +166,53 @@ class CensusAPI(BaseAPI):
             CensusAPINotFoundError: If resource is not found
             CensusAPIError: For other API errors
         """
-        if self.circuit_breaker['is_open']:
-            if time.time() - self.circuit_breaker['last_failure_time'] > self.circuit_breaker['reset_timeout']:
-                self.circuit_breaker['is_open'] = False
-                self.circuit_breaker['failures'] = 0
+        if self._circuit_breaker['is_open']:
+            if time.time() - self._circuit_breaker['last_failure_time'] > 300:  # 5 minutes
+                self._circuit_breaker['is_open'] = False
+                self._circuit_breaker['failures'] = 0
             else:
                 raise CensusAPIRateLimitError("Circuit breaker is open. Please try again later.")
         
         # Check rate limiting
         current_time = time.time()
-        if current_time - self.last_request_time < 0.1:  # Minimum 0.1 seconds between requests
+        if current_time - self._last_request_time < 0.1:  # Minimum 0.1 seconds between requests
             await asyncio.sleep(0.1)
         
-        # Add API key to params
+        # Add API key to params if not present
         if params is None:
             params = {}
-        params['key'] = self.api_key
+        if 'key' not in params:
+            params['key'] = self.api_key
         
         # Check cache
         cache_key = f"{endpoint}:{json.dumps(params, sort_keys=True)}"
-        if cache_key in self.cache:
-            cache_time = self.cache_timestamps.get(cache_key, 0)
+        if cache_key in self._cache:
+            cache_time = self._cache_timestamps.get(cache_key, 0)
             if time.time() - cache_time < 86400:  # 24-hour cache
-                return self.cache[cache_key]
+                return self._cache[cache_key]
         
         # Make request with retries
         retry_count = 0
         last_error = None
         
-        while retry_count < self.retry_config['max_retries']:
+        while retry_count < 3:  # Maximum 3 retries
             try:
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(f"{self.base_url}/{endpoint}", params=params) as response:
+                    url = f"{self.base_url}/{endpoint}"
+                    self.logger.debug(f"Making request to URL: {url} with params: {params}")
+                    
+                    # Add headers for JSON response
+                    headers = {
+                        'Accept': 'application/json',
+                        'User-Agent': 'RealEstateStrategist/1.0'
+                    }
+                    
+                    async with session.get(url, params=params, headers=headers) as response:
                         if response.status == 429:  # Rate limit
-                            self.circuit_breaker['failures'] += 1
-                            if self.circuit_breaker['failures'] >= self.circuit_breaker['threshold']:
-                                self.circuit_breaker['is_open'] = True
-                                self.circuit_breaker['last_failure_time'] = time.time()
+                            self._circuit_breaker['failures'] += 1
+                            if self._circuit_breaker['failures'] >= 5:
+                                self._circuit_breaker['is_open'] = True
+                                self._circuit_breaker['last_failure_time'] = time.time()
                             raise CensusAPIRateLimitError("Rate limit exceeded")
                         
                         if response.status == 404:
@@ -199,46 +221,48 @@ class CensusAPI(BaseAPI):
                         if response.status != 200:
                             raise CensusAPIError(f"API request failed with status {response.status}")
                         
+                        # Get response text
+                        text = await response.text()
+                        self.logger.debug(f"Response text: {text}")
+                        
+                        # Try to parse JSON
                         try:
-                            data = await response.json()
-                        except ValueError as e:
+                            # Remove any BOM characters and whitespace
+                            text = text.strip().lstrip('\ufeff')
+                            if not text:
+                                raise CensusAPIError("Empty response")
+                            
+                            data = json.loads(text)
+                            
+                            if not data or not isinstance(data, list) or len(data) < 2:
+                                raise CensusAPINotFoundError("No data found in response")
+                            
+                            # Update metrics
+                            self._request_count.inc()
+                            self._last_request_time = time.time()
+                            
+                            # Cache response
+                            self._cache[cache_key] = data
+                            self._cache_timestamps[cache_key] = time.time()
+                            
+                            return data
+                            
+                        except json.JSONDecodeError as e:
+                            self.logger.error(f"JSON decode error: {str(e)}, Response text: {text}")
                             raise CensusAPIError(f"Invalid JSON response: {str(e)}")
-                        
-                        if not data:
-                            raise CensusAPINotFoundError("No data found")
-                        
-                        # Update metrics
-                        self.request_count += 1
-                        self.last_request_time = time.time()
-                        
-                        # Cache response
-                        self.cache[cache_key] = data
-                        self.cache_timestamps[cache_key] = time.time()
-                        
-                        return data
                         
             except (aiohttp.ClientError, asyncio.TimeoutError) as e:
                 last_error = e
                 retry_count += 1
-                if retry_count < self.retry_config['max_retries']:
-                    delay = min(
-                        self.retry_config['base_delay'] * 
-                        (self.retry_config['exponential_base'] ** (retry_count - 1)),
-                        self.retry_config['max_delay']
-                    )
-                    await asyncio.sleep(delay)
+                if retry_count < 3:
+                    await asyncio.sleep(2 ** retry_count)  # Exponential backoff
                 continue
-                
-            except CensusAPIError:
-                raise
-                
+            
             except Exception as e:
-                self.error_count += 1
-                self.logger.error(f"Unexpected error in API request: {str(e)}")
+                self._error_count.inc()
                 raise CensusAPIError(f"API request failed: {str(e)}")
         
-        # If we've exhausted all retries
-        self.error_count += 1
+        self._error_count.inc()
         self.logger.error(f"Max retries exceeded. Last error: {str(last_error)}")
         raise CensusAPIError(f"Max retries exceeded: {str(last_error)}")
     
@@ -253,14 +277,14 @@ class CensusAPI(BaseAPI):
         Raises:
             CensusAPIError: The original error is re-raised after handling
         """
-        self.error_count += 1
+        self._error_count.inc()
         
         if isinstance(error, CensusAPIRateLimitError):
             self.logger.warning(f"Rate limit exceeded in {context}")
-            self.circuit_breaker['failures'] += 1
-            if self.circuit_breaker['failures'] >= self.circuit_breaker['threshold']:
-                self.circuit_breaker['is_open'] = True
-                self.circuit_breaker['last_failure_time'] = time.time()
+            self._circuit_breaker['failures'] += 1
+            if self._circuit_breaker['failures'] >= self._circuit_breaker['threshold']:
+                self._circuit_breaker['is_open'] = True
+                self._circuit_breaker['last_failure_time'] = time.time()
                 
         elif isinstance(error, CensusAPINotFoundError):
             self.logger.warning(f"Resource not found in {context}")
@@ -272,8 +296,8 @@ class CensusAPI(BaseAPI):
             self.logger.error(f"Unexpected error in {context}: {str(error)}")
         
         # Log metrics
-        self.logger.info(f"API Metrics - Requests: {self.request_count}, Errors: {self.error_count}, "
-                        f"Error Rate: {(self.error_count / self.request_count * 100):.2f}%")
+        self.logger.info(f"API Metrics - Requests: {self._request_count._value.get()}, Errors: {self._error_count._value.get()}, "
+                        f"Error Rate: {(self._error_count._value.get() / max(1, self._request_count._value.get()) * 100):.2f}%")
         
         raise error
     
@@ -387,18 +411,23 @@ class CensusAPI(BaseAPI):
             bool: True if API key is valid, False otherwise
         """
         try:
-            # Test API key with a simple query
-            response = await self._make_request(
-                endpoint='2020/acs/acs5',
-                params={
-                    'get': 'NAME',
-                    'for': 'state:*',
-                    'key': self.api_key
-                }
-            )
-            return bool(response)  # Return True if we got a non-empty response
+            # Test API key with a simple query for state names
+            params = {
+                'get': 'NAME',
+                'for': 'state:*',
+                'key': self.api_key
+            }
+            
+            # Make request to 2020 ACS 5-year estimates
+            response = await self._make_request('2020/acs/acs5', params)
+            
+            # Check if we got a valid response with data
+            if response and isinstance(response, list) and len(response) > 1:
+                self.logger.info("Census API key validation successful")
+                return True
+            return False
         except Exception as e:
-            logger.error(f"API key validation failed: {str(e)}")
+            self.logger.error(f"API key validation failed: {str(e)}")
             return False
     
     async def get_rate_limits(self) -> Dict[str, int]:
@@ -838,7 +867,7 @@ class CensusAPI(BaseAPI):
             return market_analysis
             
         except Exception as e:
-            self.error_count += 1
+            self._error_count.inc()
             self.logger.error(f"Error getting market analysis: {str(e)}")
             raise
 
@@ -1065,7 +1094,7 @@ class CensusAPI(BaseAPI):
             }
             
         except Exception as e:
-            self.error_count += 1
+            self._error_count.inc()
             self.logger.error(f"Error getting comparable properties: {str(e)}")
             raise
 
@@ -1201,24 +1230,42 @@ class CensusAPI(BaseAPI):
             }
         }
 
-    def get_metrics(self) -> Dict[str, Any]:
-        """
-        Get API usage metrics.
-        
-        Returns:
-            Dict[str, Any]: Dictionary containing API usage metrics
-        """
+    async def get_metrics(self) -> Dict[str, Any]:
+        """Get API metrics."""
         return {
-            'request_count': self.request_count,
-            'error_count': self.error_count,
-            'error_rate': (self.error_count / self.request_count * 100) if self.request_count > 0 else 0,
-            'cache_size': len(self.cache),
-            'circuit_breaker': {
-                'is_open': self.circuit_breaker['is_open'],
-                'failures': self.circuit_breaker['failures'],
-                'last_failure_time': self.circuit_breaker['last_failure_time']
-            }
+            'request_count': self._request_count._value.get(),
+            'error_count': self._error_count._value.get(),
+            'cache_size': len(self._cache),
+            'circuit_breaker_status': 'open' if self._circuit_breaker['is_open'] else 'closed'
         }
+        
+    async def health_check(self) -> Dict[str, Any]:
+        """Check API health."""
+        try:
+            # Validate API key
+            is_valid = await self.validate_api_key()
+            if not is_valid:
+                return {
+                    'status': 'error',
+                    'message': 'Invalid API key',
+                    'metrics': await self.get_metrics()
+                }
+            
+            # Get rate limits
+            rate_limits = await self.get_rate_limits()
+            
+            return {
+                'status': 'healthy',
+                'message': 'API is operational',
+                'rate_limits': rate_limits,
+                'metrics': await self.get_metrics()
+            }
+        except Exception as e:
+            return {
+                'status': 'error',
+                'message': str(e),
+                'metrics': await self.get_metrics()
+            }
 
     def _validate_demographic_data(self, data: Dict[str, Any]) -> None:
         """
@@ -1270,10 +1317,10 @@ class CensusAPI(BaseAPI):
         the oldest entries are removed.
         """
         max_cache_size = 1000  # Maximum number of cached responses
-        if len(self.cache) > max_cache_size:
+        if len(self._cache) > max_cache_size:
             # Remove oldest entries
-            sorted_timestamps = sorted(self.cache_timestamps.items(), key=lambda x: x[1])
-            for key, _ in sorted_timestamps[:len(self.cache) - max_cache_size]:
-                del self.cache[key]
-                del self.cache_timestamps[key]
-            self.logger.warning(f"Cache cleaned up. Current size: {len(self.cache)}") 
+            sorted_timestamps = sorted(self._cache_timestamps.items(), key=lambda x: x[1])
+            for key, _ in sorted_timestamps[:len(self._cache) - max_cache_size]:
+                del self._cache[key]
+                del self._cache_timestamps[key]
+            self.logger.warning(f"Cache cleaned up. Current size: {len(self._cache)}") 

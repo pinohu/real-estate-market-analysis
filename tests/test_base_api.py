@@ -16,7 +16,7 @@ This module contains tests for:
 import pytest
 import asyncio
 from datetime import datetime, timedelta
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch, AsyncMock, MagicMock
 import json
 from typing import Dict, Any, Optional
 
@@ -199,8 +199,8 @@ async def test_metrics_collection(mock_api):
     status = 200
     latency = 0.1
     
-    with patch('api_integrations.base.API_REQUESTS') as mock_requests, \
-         patch('api_integrations.base.API_LATENCY') as mock_latency, \
+    with patch('api_integrations.base.REQUEST_COUNT') as mock_requests, \
+         patch('api_integrations.base.REQUEST_LATENCY') as mock_latency, \
          patch('api_integrations.base.CIRCUIT_BREAKER') as mock_circuit_breaker:
         
         mock_api._update_metrics(endpoint, status, latency)
@@ -296,4 +296,31 @@ async def test_background_tasks(mock_api):
     with patch('asyncio.create_task') as mock_create_task:
         mock_api._start_background_tasks()
         
-        assert mock_create_task.call_count == 5  # Number of background tasks 
+        assert mock_create_task.call_count == 5  # Number of background tasks
+
+@patch('api_integrations.base.REQUEST_COUNT')
+@patch('api_integrations.base.REQUEST_LATENCY')
+@patch('api_integrations.base.ERROR_COUNT')
+async def test_make_request_with_metrics(self, mock_error_count, mock_latency, mock_request_count):
+    """Test request metrics are updated correctly."""
+    latency = 0.1
+    
+    with patch('api_integrations.base.REQUEST_COUNT') as mock_requests, \
+         patch('api_integrations.base.REQUEST_LATENCY') as mock_latency, \
+         patch('api_integrations.base.ERROR_COUNT') as mock_errors:
+        
+        mock_response = AsyncMock()
+        mock_response.status = 200
+        mock_response.json.return_value = {'data': 'test'}
+        
+        mock_session = AsyncMock()
+        mock_session.request.return_value.__aenter__.return_value = mock_response
+        
+        with patch('aiohttp.ClientSession', return_value=mock_session):
+            api = TestAPI('test_key')
+            result = await api._make_request('GET', '/test')
+            
+            assert result == {'data': 'test'}
+            mock_requests.labels.assert_called_with(api='TestAPI', endpoint='all', status='success')
+            mock_latency.labels.assert_called_with(api='TestAPI', endpoint='all')
+            mock_errors.labels.assert_not_called() 

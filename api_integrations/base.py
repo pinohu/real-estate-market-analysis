@@ -17,6 +17,7 @@ analysis system. It includes:
 """
 
 from typing import Dict, Any, List, Optional, Union, Callable, TypeVar, Generic
+from abc import abstractmethod, ABC
 import time
 import logging
 import hashlib
@@ -42,11 +43,29 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 logger = structlog.get_logger()
 
 # Prometheus metrics
-API_REQUESTS = Counter('api_requests_total', 'Total API requests', ['api', 'endpoint', 'status'])
-API_LATENCY = Histogram('api_latency_seconds', 'API request latency', ['api', 'endpoint'])
-API_ERRORS = Counter('api_errors_total', 'Total API errors', ['api', 'endpoint', 'error_type'])
-CACHE_HITS = Counter('cache_hits_total', 'Total cache hits', ['api', 'endpoint'])
-CIRCUIT_BREAKER = Gauge('circuit_breaker_status', 'Circuit breaker status', ['api'])
+REQUEST_COUNT = Counter(
+    'api_request_total',
+    'Total number of API requests',
+    ['api', 'endpoint', 'status']
+)
+
+REQUEST_LATENCY = Histogram(
+    'api_request_latency_seconds',
+    'API request latency in seconds',
+    ['api', 'endpoint']
+)
+
+ERROR_COUNT = Counter(
+    'api_error_total',
+    'Total number of API errors',
+    ['api', 'error_type']
+)
+
+CACHE_SIZE = Gauge(
+    'api_cache_size',
+    'Current size of API response cache',
+    ['api']
+)
 
 T = TypeVar('T')
 
@@ -127,7 +146,56 @@ class APIResponse(Generic[T]):
         self.metadata = metadata or {}
         self.timestamp = datetime.utcnow()
 
-class BaseAPI:
+def rate_limit(calls: int, period: int):
+    """Rate limiting decorator."""
+    def decorator(func):
+        last_reset = datetime.now()
+        calls_made = 0
+        
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            nonlocal last_reset, calls_made
+            
+            now = datetime.now()
+            if now - last_reset > timedelta(seconds=period):
+                calls_made = 0
+                last_reset = now
+                
+            if calls_made >= calls:
+                wait_time = period - (now - last_reset).total_seconds()
+                if wait_time > 0:
+                    await asyncio.sleep(wait_time)
+                calls_made = 0
+                last_reset = datetime.now()
+                
+            calls_made += 1
+            return await func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+def cache_response(timeout: int = 3600):
+    """Cache API response decorator."""
+    def decorator(func):
+        cache = {}
+        
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            key = str(args) + str(kwargs)
+            now = datetime.now()
+            
+            if key in cache:
+                result, timestamp = cache[key]
+                if now - timestamp < timedelta(seconds=timeout):
+                    return result
+                    
+            result = await func(*args, **kwargs)
+            cache[key] = (result, now)
+            return result
+            
+        return wrapper
+    return decorator
+
+class BaseAPI(ABC):
     """
     Base class for all API integrations.
     
@@ -200,14 +268,14 @@ class BaseAPI:
         )
         
         # Initialize state
-        self._request_count = 0
-        self._error_count = 0
+        self._request_count = REQUEST_COUNT.labels(api=self.__class__.__name__, endpoint="all", status="success")
+        self._error_count = ERROR_COUNT.labels(api=self.__class__.__name__, error_type="general")
         self._cache = {}
         self._cache_timestamps = {}
         self._last_request_time = 0
         self._circuit_breaker = {
             'failures': 0,
-            'last_failure_time': 0,
+            'last_failure_time': None,
             'is_open': False,
             'half_open': False
         }
@@ -230,11 +298,10 @@ class BaseAPI:
         if self._monitoring_config.metrics_enabled:
             # Initialize Prometheus metrics
             self._metrics = {
-                'requests': API_REQUESTS.labels(api=self.__class__.__name__),
-                'latency': API_LATENCY.labels(api=self.__class__.__name__),
-                'errors': API_ERRORS.labels(api=self.__class__.__name__),
-                'cache_hits': CACHE_HITS.labels(api=self.__class__.__name__),
-                'circuit_breaker': CIRCUIT_BREAKER.labels(api=self.__class__.__name__)
+                'requests': REQUEST_COUNT.labels(api=self.__class__.__name__, endpoint="all", status="success"),
+                'latency': REQUEST_LATENCY.labels(api=self.__class__.__name__, endpoint="all"),
+                'errors': ERROR_COUNT.labels(api=self.__class__.__name__, error_type="general"),
+                'cache_size': CACHE_SIZE.labels(api=self.__class__.__name__)
             }
     
     def _setup_logging(self) -> None:
@@ -398,127 +465,44 @@ class BaseAPI:
     
     async def _make_request(
         self,
+        method: str,
         endpoint: str,
         params: Optional[Dict[str, Any]] = None,
-        method: str = 'GET',
-        headers: Optional[Dict[str, str]] = None,
         data: Optional[Dict[str, Any]] = None,
-        validate_response: bool = True
-    ) -> APIResponse[T]:
-        """
-        Make API request with retries, circuit breaker, and rate limiting.
+        headers: Optional[Dict[str, str]] = None
+    ) -> Any:
+        """Make HTTP request to API."""
+        if self._circuit_breaker["is_open"]:
+            if (datetime.now() - self._circuit_breaker["last_failure_time"]).total_seconds() < self._circuit_breaker["reset_timeout"]:
+                raise Exception("Circuit breaker is open")
+            self._circuit_breaker["is_open"] = False
+            self._circuit_breaker["failures"] = 0
         
-        Args:
-            endpoint: The API endpoint
-            params: Query parameters
-            method: HTTP method
-            headers: Request headers
-            data: Request body
-            validate_response: Whether to validate response
-            
-        Returns:
-            APIResponse: The API response
-            
-        Raises:
-            RateLimitError: If rate limit is exceeded
-            CircuitBreakerError: If circuit breaker is open
-            APIError: For other API errors
-        """
-        # Check circuit breaker
-        if self._circuit_breaker['is_open']:
-            raise CircuitBreakerError("Circuit breaker is open")
-        
-        # Validate request
-        self._validate_request(endpoint, params)
-        
-        # Check rate limit
-        if not self._check_rate_limit():
-            raise RateLimitError("Rate limit exceeded")
-        
-        # Generate cache key
-        cache_key = self._get_cache_key(endpoint, params)
-        
-        # Check cache
-        if method == 'GET' and cache_key in self._cache:
-            if time.time() - self._cache_timestamps[cache_key] <= self._get_cache_timeout():
-                self._metrics['cache_hits'].inc()
-                return self._cache[cache_key]
-        
-        # Prepare request
+        url = f"{self.base_url}{endpoint}"
         headers = headers or {}
-        if self._security_config.request_signing_enabled:
-            headers['X-Request-Signature'] = self._sign_request(endpoint, params)
+        headers["Authorization"] = f"Bearer {self._api_key}"
         
-        # Make request with retries
-        start_time = time.time()
         try:
-            response = await self._make_request_with_retry(
-                endpoint,
-                params,
-                method,
-                headers,
-                data
-            )
-            
-            # Validate response
-            if validate_response:
-                self._validate_response(response)
-            
-            # Update metrics
-            self._update_metrics(endpoint, response.metadata['status'], time.time() - start_time)
-            
-            # Cache response
-            if method == 'GET':
-                self._cache[cache_key] = response
-                self._cache_timestamps[cache_key] = time.time()
-            
-            return response
-            
+            async with aiohttp.ClientSession() as session:
+                async with session.request(
+                    method,
+                    url,
+                    params=params,
+                    json=data,
+                    headers=headers
+                ) as response:
+                    if response.status >= 400:
+                        self._error_count.inc()
+                        self._circuit_breaker["failures"] += 1
+                        if self._circuit_breaker["failures"] >= 5:
+                            self._circuit_breaker["is_open"] = True
+                            self._circuit_breaker["last_failure_time"] = datetime.now()
+                        raise Exception(f"API request failed with status {response.status}")
+                    self._request_count.inc()
+                    return await response.json()
         except Exception as e:
-            self._handle_error(e, endpoint)
-            raise
-    
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=10)
-    )
-    async def _make_request_with_retry(
-        self,
-        endpoint: str,
-        params: Optional[Dict[str, Any]] = None,
-        method: str = 'GET',
-        headers: Optional[Dict[str, str]] = None,
-        data: Optional[Dict[str, Any]] = None
-    ) -> APIResponse[T]:
-        """
-        Make API request with retry logic.
-        
-        Args:
-            endpoint: The API endpoint
-            params: Query parameters
-            method: HTTP method
-            headers: Request headers
-            data: Request body
-            
-        Returns:
-            APIResponse: The API response
-        """
-        session = await self._get_session()
-        url = f"{self.base_url}/{endpoint}"
-        
-        async with session.request(
-            method,
-            url,
-            params=params,
-            headers=headers,
-            json=data,
-            ssl=self._ssl_context
-        ) as response:
-            response_data = await response.json()
-            return APIResponse(response_data, {
-                'status': response.status,
-                'headers': dict(response.headers)
-            })
+            self._error_count.inc()
+            raise e
     
     def _validate_response(self, response: APIResponse[T]) -> None:
         """
@@ -608,25 +592,15 @@ class BaseAPI:
         self._session = None
     
     def get_metrics(self) -> Dict[str, Any]:
-        """
-        Get API usage metrics.
-        
-        Returns:
-            Dict[str, Any]: Dictionary containing metrics
-        """
+        """Get API metrics."""
         return {
-            'request_count': self._request_count,
-            'error_count': self._error_count,
-            'error_rate': self._error_count / max(1, self._request_count),
+            'requests': REQUEST_COUNT.labels(api=self.__class__.__name__, endpoint="all", status="success"),
+            'errors': ERROR_COUNT.labels(api=self.__class__.__name__, error_type="general"),
             'cache_size': len(self._cache),
             'circuit_breaker': {
                 'is_open': self._circuit_breaker['is_open'],
                 'failures': self._circuit_breaker['failures'],
                 'last_failure_time': self._circuit_breaker['last_failure_time']
-            },
-            'rate_limit': {
-                'tokens': self._rate_limit_tokens,
-                'last_refresh': self._last_token_refresh
             }
         }
 
