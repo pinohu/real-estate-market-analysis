@@ -1,8 +1,14 @@
 import React, { PropsWithChildren } from 'react';
-import { AppLayout, TopNavigation, SideNavigation } from '@cloudscape-design/components';
+import { AppLayout, TopNavigation, SideNavigation, Spinner } from '@cloudscape-design/components';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 
-const Layout: React.FC = () => {
+interface LayoutProps {
+  children?: React.ReactNode;
+  activeHref?: string;
+  isLoading?: boolean;
+}
+
+const Layout: React.FC<LayoutProps> = ({ children, activeHref, isLoading }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -11,6 +17,14 @@ const Layout: React.FC = () => {
     { type: 'link' as const, text: 'Market Analysis', href: '/market-analysis' },
     { type: 'link' as const, text: 'Property Comparison', href: '/property-comparison' },
   ];
+
+  const content = isLoading ? (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+      <Spinner size="large" />
+    </div>
+  ) : (
+    children || <Outlet />
+  );
 
   return (
     <div>
@@ -28,10 +42,10 @@ const Layout: React.FC = () => {
         ]}
       />
       <AppLayout
-        content={<Outlet />}
+        content={content}
         navigation={
           <SideNavigation
-            activeHref={location.pathname}
+            activeHref={activeHref || location.pathname}
             items={navigationItems}
             header={{
               href: '/',
