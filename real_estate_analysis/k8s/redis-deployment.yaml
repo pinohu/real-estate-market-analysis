@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: real-estate-redis
+  labels:
+    app: real-estate-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: real-estate-redis
+  template:
+    metadata:
+      labels:
+        app: real-estate-redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:6
+        ports:
+        - containerPort: 6379
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "300m"
+            memory: "512Mi"
+        readinessProbe:
+          tcpSocket:
+            port: 6379
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 6379
+          initialDelaySeconds: 15
+          periodSeconds: 20 

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Real Estate Valuation and Negotiation Strategist{% endblock %}
+
+{% block content %}
+<div class="jumbotron">
+    <h1 class="display-4">Real Estate Valuation and Negotiation Strategist</h1>
+    <p class="lead">Analyze properties, generate negotiation strategies, and create comprehensive reports.</p>
+    <hr class="my-4">
+    <p>Choose an option below to get started:</p>
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Single Property Analysis</h5>
+                    <p class="card-text">Analyze a single property by address, generate negotiation strategies, and create a detailed report.</p>
+                    <a href="/single-property" class="btn btn-primary">Analyze Single Property</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Batch Property Analysis</h5>
+                    <p class="card-text">Upload a CSV or Excel file with multiple properties to analyze in batch.</p>
+                    <a href="/batch-analysis" class="btn btn-primary">Batch Analysis</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">View Reports</h5>
+                    <p class="card-text">Access previously generated property analysis reports.</p>
+                    <a href="/reports" class="btn btn-primary">View Reports</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">About</h5>
+                    <p class="card-text">Learn more about the Real Estate Valuation and Negotiation Strategist.</p>
+                    <a href="/about" class="btn btn-primary">About</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

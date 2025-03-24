@@ -1,0 +1,397 @@
+{% extends "base.html" %}
+
+{% block title %}System Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- System Overview -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2>System Overview</h2>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">CPU Usage</h5>
+                    <div class="progress mb-2">
+                        <div id="cpu-usage" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <p class="card-text" id="cpu-text">0%</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Memory Usage</h5>
+                    <div class="progress mb-2">
+                        <div id="memory-usage" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <p class="card-text" id="memory-text">0%</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Disk Usage</h5>
+                    <div class="progress mb-2">
+                        <div id="disk-usage" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <p class="card-text" id="disk-text">0%</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Network I/O</h5>
+                    <p class="card-text" id="network-text">0 MB/s</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Performance -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2>API Performance</h2>
+        </div>
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Provider</th>
+                                    <th>Success Rate</th>
+                                    <th>Response Time</th>
+                                    <th>Requests/Min</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="api-metrics">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Database Performance -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2>Database Performance</h2>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Active Connections</h5>
+                    <p class="card-text" id="db-connections">0</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Average Query Time</h5>
+                    <p class="card-text" id="db-query-time">0 ms</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alerts -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2>Active Alerts</h2>
+        </div>
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div id="alerts-list">
+                        <p class="text-muted">No active alerts</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Backup Status -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2>Backup Status</h2>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Latest Backup</h5>
+                    <p class="card-text" id="latest-backup">Never</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Total Backups</h5>
+                    <p class="card-text" id="total-backups">0</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Storage Used</h5>
+                    <p class="card-text" id="backup-storage">0 MB</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Performance Charts -->
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h2>Performance Trends</h2>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">System Resources</h5>
+                    <canvas id="system-chart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">API Response Times</h5>
+                    <canvas id="api-chart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Initialize charts
+const systemChart = new Chart(document.getElementById('system-chart'), {
+    type: 'line',
+    data: {
+        labels: [],
+        datasets: [{
+            label: 'CPU Usage',
+            data: [],
+            borderColor: 'rgb(75, 192, 192)',
+            tension: 0.1
+        }, {
+            label: 'Memory Usage',
+            data: [],
+            borderColor: 'rgb(255, 99, 132)',
+            tension: 0.1
+        }]
+    },
+    options: {
+        responsive: true,
+        scales: {
+            y: {
+                beginAtZero: true,
+                max: 100
+            }
+        }
+    }
+});
+
+const apiChart = new Chart(document.getElementById('api-chart'), {
+    type: 'line',
+    data: {
+        labels: [],
+        datasets: []
+    },
+    options: {
+        responsive: true,
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        }
+    }
+});
+
+// Update dashboard data
+function updateDashboard() {
+    // Fetch metrics
+    fetch('/api/dashboard/metrics')
+        .then(response => response.json())
+        .then(data => {
+            // Update system metrics
+            updateSystemMetrics(data.system);
+            
+            // Update API metrics
+            updateAPIMetrics(data.api);
+            
+            // Update trends
+            updateTrends(data.trends);
+        })
+        .catch(error => console.error('Error fetching metrics:', error));
+
+    // Fetch alerts
+    fetch('/api/dashboard/alerts')
+        .then(response => response.json())
+        .then(data => {
+            updateAlerts(data.alerts);
+        })
+        .catch(error => console.error('Error fetching alerts:', error));
+
+    // Fetch backup status
+    fetch('/api/dashboard/backups')
+        .then(response => response.json())
+        .then(data => {
+            updateBackupStatus(data);
+        })
+        .catch(error => console.error('Error fetching backup status:', error));
+
+    // Fetch performance data
+    fetch('/api/dashboard/performance')
+        .then(response => response.json())
+        .then(data => {
+            updatePerformanceCharts(data.performance);
+        })
+        .catch(error => console.error('Error fetching performance data:', error));
+}
+
+// Update system metrics
+function updateSystemMetrics(system) {
+    const metrics = system.current_metrics;
+    
+    // Update CPU usage
+    document.getElementById('cpu-usage').style.width = `${metrics.cpu_percent}%`;
+    document.getElementById('cpu-text').textContent = `${metrics.cpu_percent.toFixed(1)}%`;
+    
+    // Update memory usage
+    document.getElementById('memory-usage').style.width = `${metrics.memory_percent}%`;
+    document.getElementById('memory-text').textContent = `${metrics.memory_percent.toFixed(1)}%`;
+    
+    // Update disk usage
+    document.getElementById('disk-usage').style.width = `${metrics.disk_usage_percent}%`;
+    document.getElementById('disk-text').textContent = `${metrics.disk_usage_percent.toFixed(1)}%`;
+    
+    // Update network I/O
+    document.getElementById('network-text').textContent = 
+        `${(metrics.network_bytes_sent / 1024 / 1024).toFixed(1)} MB/s`;
+}
+
+// Update API metrics
+function updateAPIMetrics(api) {
+    const tbody = document.getElementById('api-metrics');
+    tbody.innerHTML = '';
+    
+    for (const [provider, metrics] of Object.entries(api)) {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${provider}</td>
+            <td>${(metrics.success_rate * 100).toFixed(1)}%</td>
+            <td>${metrics.avg_response_time.toFixed(1)} ms</td>
+            <td>${metrics.requests_per_minute.toFixed(1)}</td>
+            <td>
+                <span class="badge ${getStatusBadgeClass(metrics.success_rate)}">
+                    ${getStatusText(metrics.success_rate)}
+                </span>
+            </td>
+        `;
+        tbody.appendChild(row);
+    }
+}
+
+// Update alerts
+function updateAlerts(alerts) {
+    const alertsList = document.getElementById('alerts-list');
+    alertsList.innerHTML = '';
+    
+    if (alerts.length === 0) {
+        alertsList.innerHTML = '<p class="text-muted">No active alerts</p>';
+        return;
+    }
+    
+    alerts.forEach(alert => {
+        const alertElement = document.createElement('div');
+        alertElement.className = `alert alert-${getAlertClass(alert.level)}`;
+        alertElement.innerHTML = `
+            <strong>${alert.type.toUpperCase()}</strong>: ${alert.message}
+            <small class="float-end">${new Date(alert.timestamp).toLocaleString()}</small>
+        `;
+        alertsList.appendChild(alertElement);
+    });
+}
+
+// Update backup status
+function updateBackupStatus(data) {
+    document.getElementById('latest-backup').textContent = 
+        data.latest_backup ? new Date(data.latest_backup).toLocaleString() : 'Never';
+    document.getElementById('total-backups').textContent = data.stats.total_backups;
+    document.getElementById('backup-storage').textContent = 
+        `${(data.stats.total_size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// Update performance charts
+function updatePerformanceCharts(performance) {
+    // Update system chart
+    systemChart.data.labels = performance.system.timestamps;
+    systemChart.data.datasets[0].data = performance.system.cpu;
+    systemChart.data.datasets[1].data = performance.system.memory;
+    systemChart.update();
+    
+    // Update API chart
+    apiChart.data.labels = performance.api.timestamps;
+    apiChart.data.datasets = Object.entries(performance.api.response_times).map(([provider, data], index) => ({
+        label: provider,
+        data: data,
+        borderColor: getChartColor(index),
+        tension: 0.1
+    }));
+    apiChart.update();
+}
+
+// Helper functions
+function getStatusBadgeClass(successRate) {
+    if (successRate >= 0.95) return 'bg-success';
+    if (successRate >= 0.9) return 'bg-warning';
+    return 'bg-danger';
+}
+
+function getStatusText(successRate) {
+    if (successRate >= 0.95) return 'Healthy';
+    if (successRate >= 0.9) return 'Warning';
+    return 'Critical';
+}
+
+function getAlertClass(level) {
+    switch (level) {
+        case 'critical': return 'danger';
+        case 'warning': return 'warning';
+        default: return 'info';
+    }
+}
+
+function getChartColor(index) {
+    const colors = [
+        'rgb(75, 192, 192)',
+        'rgb(255, 99, 132)',
+        'rgb(54, 162, 235)',
+        'rgb(255, 206, 86)',
+        'rgb(153, 102, 255)'
+    ];
+    return colors[index % colors.length];
+}
+
+// Start periodic updates
+setInterval(updateDashboard, 5000);
+updateDashboard();
+</script>
+{% endblock %} 

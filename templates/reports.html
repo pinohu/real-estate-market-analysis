@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}Reports{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">Generated Reports</h1>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h5 class="card-title">Property Reports</h5>
+        
+        <div class="mb-3">
+            <input type="text" id="reportSearch" class="form-control" placeholder="Search by address...">
+        </div>
+        
+        <div class="table-responsive">
+            <table class="table table-striped" id="reportsTable">
+                <thead>
+                    <tr>
+                        <th>Property Address</th>
+                        <th>Report Type</th>
+                        <th>Generated Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Reports will be inserted here -->
+                </tbody>
+            </table>
+        </div>
+        
+        <div id="noReports" class="alert alert-info d-none">
+            No reports found. Generate a report by analyzing a property.
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h5 class="card-title">Batch Summary Reports</h5>
+        
+        <div class="table-responsive">
+            <table class="table table-striped" id="batchSummaryTable">
+                <thead>
+                    <tr>
+                        <th>Batch Name</th>
+                        <th>Properties</th>
+                        <th>Generated Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Batch summaries will be inserted here -->
+                </tbody>
+            </table>
+        </div>
+        
+        <div id="noBatchSummaries" class="alert alert-info d-none">
+            No batch summary reports found. Generate a batch summary by analyzing multiple properties.
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Load reports
+    loadReports();
+    
+    // Set up search functionality
+    const reportSearch = document.getElementById('reportSearch');
+    reportSearch.addEventListener('input', function() {
+        filterReports(this.value);
+    });
+    
+    function loadReports() {
+        fetch('/get-reports')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    populateReportsTable(data.reports);
+                    populateBatchSummaryTable(data.batch_summaries);
+                } else {
+                    console.error('Error loading reports:', data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+    }
+    
+    function populateReportsTable(reports) {
+        const reportsTable = document.getElementById('reportsTable').getElementsByTagName('tbody')[0];
+        reportsTable.innerHTML = '';
+        
+        const noReports = document.getElementById('noReports');
+        
+        if (reports.length === 0) {
+            noReports.classList.remove('d-none');
+            return;
+        }
+        
+        noReports.classList.add('d-none');
+        
+        reports.forEach(report => {
+            const row = reportsTable.insertRow();
+            
+            // Add cells
+            addCell(row, report.property_address);
+            addCell(row, report.report_type);
+            addCell(row, new Date(report.generated_date).toLocaleString());
+            
+            // Add action buttons
+            const actionsCell = row.insertCell();
+            actionsCell.innerHTML = `
+                <a href="${report.view_url}" class="btn btn-sm btn-outline-primary me-1" target="_blank">View</a>
+                <a href="${report.download_url}" class="btn btn-sm btn-outline-secondary" download>Download</a>
+            `;
+        });
+    }
+    
+    function populateBatchSummaryTable(summaries) {
+        const summaryTable = document.getElementById('batchSummaryTable').getElementsByTagName('tbody')[0];
+        summaryTable.innerHTML = '';
+        
+        const noBatchSummaries = document.getElementById('noBatchSummaries');
+        
+        if (summaries.length === 0) {
+            noBatchSummaries.classList.remove('d-none');
+            return;
+        }
+        
+        noBatchSummaries.classList.add('d-none');
+        
+        summaries.forEach(summary => {
+            const row = summaryTable.insertRow();
+            
+            // Add cells
+            addCell(row, summary.batch_name);
+            addCell(row, summary.property_count);
+            addCell(row, new Date(summary.generated_date).toLocaleString());
+            
+            // Add action buttons
+            const actionsCell = row.insertCell();
+            actionsCell.innerHTML = `
+                <a href="${summary.view_url}" class="btn btn-sm btn-outline-primary me-1" target="_blank">View</a>
+                <a href="${summary.download_url}" class="btn btn-sm btn-outline-secondary" download>Download</a>
+            `;
+        });
+    }
+    
+    function filterReports(searchTerm) {
+        const reportsTable = document.getElementById('reportsTable');
+        const rows = reportsTable.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+        
+        searchTerm = searchTerm.toLowerCase();
+        
+        for (let i = 0; i < rows.length; i++) {
+            const addressCell = rows[i].cells[0];
+            const address = addressCell.textContent.toLowerCase();
+            
+            if (address.includes(searchTerm)) {
+                rows[i].style.display = '';
+            } else {
+                rows[i].style.display = 'none';
+            }
+        }
+    }
+    
+    function addCell(row, text) {
+        const cell = row.insertCell();
+        cell.textContent = text;
+    }
+});
+</script>
+{% endblock %}

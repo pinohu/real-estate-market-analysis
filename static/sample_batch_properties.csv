@@ -1,0 +1,6 @@
+address,property_type,bedrooms,bathrooms,square_feet,year_built,listing_price
+123 Main St, Anytown, CA 12345,Single Family,3,2,1800,1985,450000
+456 Oak Ave, Anytown, CA 12345,Single Family,4,2.5,2200,1995,550000
+789 Pine Rd, Anytown, CA 12345,Condo,2,2,1200,2005,350000
+101 Cedar Ln, Anytown, CA 12345,Townhouse,3,2.5,1600,2010,425000
+202 Maple Dr, Anytown, CA 12345,Single Family,5,3,2800,2000,650000

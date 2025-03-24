@@ -1,0 +1,275 @@
+/* Dashboard-specific styles */
+
+/* Card styles */
+.card {
+    transition: transform 0.2s ease-in-out;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+}
+
+/* Progress bar styles */
+.progress {
+    background-color: #e9ecef;
+    border-radius: 0.5rem;
+    overflow: hidden;
+}
+
+.progress-bar {
+    transition: width 0.5s ease-in-out;
+}
+
+/* Alert styles */
+.alert {
+    border-radius: 0.5rem;
+    border: none;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.alert-dismissible .btn-close {
+    padding: 1.25rem;
+}
+
+/* Badge styles */
+.badge {
+    font-weight: 500;
+    letter-spacing: 0.3px;
+}
+
+/* Chart container styles */
+.chart-container {
+    position: relative;
+    height: 300px;
+    width: 100%;
+}
+
+/* Table styles */
+.table {
+    margin-bottom: 0;
+}
+
+.table th {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.875rem;
+    letter-spacing: 0.5px;
+}
+
+.table td {
+    vertical-align: middle;
+}
+
+/* Status indicators */
+.status-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 0.5rem;
+}
+
+.status-healthy {
+    background-color: #28a745;
+}
+
+.status-warning {
+    background-color: #ffc107;
+}
+
+.status-critical {
+    background-color: #dc3545;
+}
+
+/* Metric cards */
+.metric-card {
+    text-align: center;
+    padding: 1.5rem;
+}
+
+.metric-card .metric-value {
+    font-size: 2rem;
+    font-weight: 600;
+    margin: 1rem 0;
+}
+
+.metric-card .metric-label {
+    color: #6c757d;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Trend indicators */
+.trend-indicator {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 0.5rem;
+}
+
+.trend-up {
+    color: #28a745;
+}
+
+.trend-down {
+    color: #dc3545;
+}
+
+.trend-stable {
+    color: #6c757d;
+}
+
+/* Time range selector */
+.time-range-selector {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.time-range-selector .btn {
+    padding: 0.25rem 0.75rem;
+    font-size: 0.875rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .sidebar {
+        min-height: auto;
+        padding: 1rem;
+    }
+    
+    .main-content {
+        padding: 1rem;
+    }
+    
+    .metric-card {
+        margin-bottom: 1rem;
+    }
+    
+    .chart-container {
+        height: 250px;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .card {
+        background-color: #343a40;
+        color: #fff;
+    }
+    
+    .table {
+        color: #fff;
+    }
+    
+    .table th,
+    .table td {
+        border-color: #495057;
+    }
+    
+    .metric-card .metric-label {
+        color: #adb5bd;
+    }
+    
+    .progress {
+        background-color: #495057;
+    }
+    
+    .alert {
+        background-color: #343a40;
+        color: #fff;
+    }
+    
+    .alert-success {
+        border-left: 4px solid #28a745;
+    }
+    
+    .alert-warning {
+        border-left: 4px solid #ffc107;
+    }
+    
+    .alert-danger {
+        border-left: 4px solid #dc3545;
+    }
+    
+    .alert-info {
+        border-left: 4px solid #17a2b8;
+    }
+}
+
+/* Loading states */
+.loading {
+    position: relative;
+    min-height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.loading::after {
+    content: '';
+    width: 40px;
+    height: 40px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #0d6efd;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Tooltip styles */
+.tooltip {
+    position: relative;
+    display: inline-block;
+}
+
+.tooltip .tooltip-text {
+    visibility: hidden;
+    background-color: #343a40;
+    color: #fff;
+    text-align: center;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    position: absolute;
+    z-index: 1;
+    bottom: 125%;
+    left: 50%;
+    transform: translateX(-50%);
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.tooltip:hover .tooltip-text {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* Refresh button */
+.refresh-button {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 50%;
+    background-color: #0d6efd;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    transition: transform 0.2s ease-in-out;
+}
+
+.refresh-button:hover {
+    transform: scale(1.1);
+}
+
+.refresh-button i {
+    font-size: 1.25rem;
+} 
