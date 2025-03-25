@@ -1,190 +1,155 @@
 import React, { useState } from 'react';
 import {
-  Box,
-  Button,
   Container,
+  Header,
+  SpaceBetween,
+  Button,
   Form,
   FormField,
-  Grid,
-  Header,
   Input,
-  SpaceBetween,
-  Table,
   LineChart,
-  ColumnLayout,
-  Cards
+  Box,
+  Alert,
+  ColumnLayout
 } from '@cloudscape-design/components';
-
-interface MarketMetrics {
-  medianPrice: string;
-  inventory: string;
-  daysOnMarket: string;
-  pricePerSqFt: string;
-  yearOverYearChange: string;
-}
+import { MarketMetrics, PriceHistoryPoint } from '../types/market';
+import { getMarketAnalysis } from '../services/marketService';
 
 const MarketAnalysis: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
-  const [showResults, setShowResults] = useState(false);
-  const [location, setLocation] = useState({
-    city: '',
-    state: '',
-    zipCode: ''
-  });
+  const [location, setLocation] = useState('');
+  const [propertyType, setPropertyType] = useState('');
+  const [analysisResults, setAnalysisResults] = useState<MarketMetrics | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleAnalyze = () => {
+  const handleAnalyze = async () => {
+    if (!location || !propertyType) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
     setIsLoading(true);
-    // Simulated API call
-    setTimeout(() => {
-      setShowResults(true);
+    setError(null);
+
+    try {
+      const data = await getMarketAnalysis(location, propertyType);
+      setAnalysisResults(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch market analysis. Please try again.');
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
-
-  const marketTrends = [
-    {
-      neighborhood: 'Downtown',
-      medianPrice: '$525,000',
-      priceChange: '+6.2%',
-      inventory: '145',
-      daysOnMarket: '25'
-    },
-    {
-      neighborhood: 'Suburbs North',
-      medianPrice: '$425,000',
-      priceChange: '+4.8%',
-      inventory: '230',
-      daysOnMarket: '32'
-    },
-    {
-      neighborhood: 'Suburbs South',
-      medianPrice: '$395,000',
-      priceChange: '+5.1%',
-      inventory: '185',
-      daysOnMarket: '28'
-    }
-  ];
-
-  const comparableProperties = [
-    {
-      address: '123 Oak St',
-      price: '$445,000',
-      sqft: '2,200',
-      bedsBaths: '3/2',
-      daysOnMarket: '15'
-    },
-    {
-      address: '456 Maple Ave',
-      price: '$452,000',
-      sqft: '2,300',
-      bedsBaths: '3/2.5',
-      daysOnMarket: '22'
-    },
-    {
-      address: '789 Pine Rd',
-      price: '$438,000',
-      sqft: '2,100',
-      bedsBaths: '3/2',
-      daysOnMarket: '30'
-    }
-  ];
 
   return (
     <Container>
       <SpaceBetween size="l">
         <Header
           variant="h1"
-          description="Detailed analysis of market trends by neighborhood"
+          description="Analyze market trends and conditions for specific locations"
         >
           Market Analysis
         </Header>
 
-        <Table
-          columnDefinitions={[
-            {
-              id: 'neighborhood',
-              header: 'Neighborhood',
-              cell: item => item.neighborhood
-            },
-            {
-              id: 'medianPrice',
-              header: 'Median Price',
-              cell: item => item.medianPrice
-            },
-            {
-              id: 'priceChange',
-              header: 'YoY Change',
-              cell: item => (
-                <Box color={item.priceChange.startsWith('+') ? 'text-status-success' : 'text-status-error'}>
-                  {item.priceChange}
-                </Box>
-              )
-            },
-            {
-              id: 'inventory',
-              header: 'Active Listings',
-              cell: item => item.inventory
-            },
-            {
-              id: 'daysOnMarket',
-              header: 'Days on Market',
-              cell: item => item.daysOnMarket
-            }
-          ]}
-          items={marketTrends}
-          header={
-            <Header
-              variant="h2"
-              description="Current market metrics by neighborhood"
-            >
-              Neighborhood Trends
-            </Header>
-          }
-        />
+        {error && (
+          <Alert type="error" dismissible onDismiss={() => setError(null)}>
+            {error}
+          </Alert>
+        )}
 
-        <Cards
-          cardDefinition={{
-            header: item => (
-              <Header variant="h3">{item.neighborhood}</Header>
-            ),
-            sections: [
-              {
-                id: 'metrics',
-                content: item => (
-                  <ColumnLayout columns={2} variant="text-grid">
-                    <div>
-                      <Box variant="awsui-key-label">Median Price</Box>
-                      <Box variant="p">{item.medianPrice}</Box>
-                    </div>
-                    <div>
-                      <Box variant="awsui-key-label">Price Change</Box>
-                      <Box variant="p" color={item.priceChange.startsWith('+') ? 'text-status-success' : 'text-status-error'}>
-                        {item.priceChange}
-                      </Box>
-                    </div>
-                    <div>
-                      <Box variant="awsui-key-label">Active Listings</Box>
-                      <Box variant="p">{item.inventory}</Box>
-                    </div>
-                    <div>
-                      <Box variant="awsui-key-label">Days on Market</Box>
-                      <Box variant="p">{item.daysOnMarket}</Box>
-                    </div>
-                  </ColumnLayout>
-                )
-              }
-            ]
-          }}
-          items={marketTrends}
-          header={
-            <Header
-              variant="h2"
-              description="Detailed view of each neighborhood"
+        <Form
+          actions={
+            <Button
+              variant="primary"
+              onClick={handleAnalyze}
+              loading={isLoading}
             >
-              Neighborhood Cards
-            </Header>
+              Analyze Market
+            </Button>
           }
-        />
+        >
+          <SpaceBetween size="l">
+            <ColumnLayout columns={2}>
+              <FormField label="Location" constraintText="Required">
+                <Input
+                  value={location}
+                  onChange={e => setLocation(e.detail.value)}
+                  placeholder="Enter city, state or ZIP code"
+                />
+              </FormField>
+              <FormField label="Property Type" constraintText="Required">
+                <Input
+                  value={propertyType}
+                  onChange={e => setPropertyType(e.detail.value)}
+                  placeholder="e.g., Single Family, Condo"
+                />
+              </FormField>
+            </ColumnLayout>
+          </SpaceBetween>
+        </Form>
+
+        {analysisResults && (
+          <SpaceBetween size="l">
+            <Box variant="h2">Market Analysis Results</Box>
+            <ColumnLayout columns={2}>
+              <Box>
+                <SpaceBetween size="m">
+                  <div>
+                    <Box variant="awsui-key-label">Median Price</Box>
+                    <Box variant="h3">${analysisResults.medianPrice.toLocaleString()}</Box>
+                  </div>
+                  <div>
+                    <Box variant="awsui-key-label">Days on Market</Box>
+                    <Box variant="h3">{analysisResults.daysOnMarket} days</Box>
+                  </div>
+                  <div>
+                    <Box variant="awsui-key-label">Price per Sq Ft</Box>
+                    <Box variant="h3">${analysisResults.pricePerSqFt}</Box>
+                  </div>
+                </SpaceBetween>
+              </Box>
+              <Box>
+                <SpaceBetween size="m">
+                  <div>
+                    <Box variant="awsui-key-label">Inventory Level</Box>
+                    <Box variant="h3">{analysisResults.inventoryLevel}</Box>
+                  </div>
+                  <div>
+                    <Box variant="awsui-key-label">Year over Year Change</Box>
+                    <Box variant="h3">{analysisResults.yearOverYearChange}%</Box>
+                  </div>
+                </SpaceBetween>
+              </Box>
+            </ColumnLayout>
+
+            <Box>
+              <Header variant="h3">Price Trends</Header>
+              <LineChart
+                series={[
+                  {
+                    title: 'Median Price',
+                    type: 'line',
+                    data: analysisResults.priceHistory.map((point: PriceHistoryPoint) => ({
+                      x: new Date(point.date),
+                      y: point.value
+                    }))
+                  }
+                ]}
+                xDomain={[
+                  new Date(analysisResults.priceHistory[0].date),
+                  new Date(analysisResults.priceHistory[analysisResults.priceHistory.length - 1].date)
+                ]}
+                yDomain={[
+                  Math.min(...analysisResults.priceHistory.map((p: PriceHistoryPoint) => p.value)) * 0.9,
+                  Math.max(...analysisResults.priceHistory.map((p: PriceHistoryPoint) => p.value)) * 1.1
+                ]}
+                i18nStrings={{
+                  xTickFormatter: (date: Date) => date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+                }}
+              />
+            </Box>
+          </SpaceBetween>
+        )}
       </SpaceBetween>
     </Container>
   );
